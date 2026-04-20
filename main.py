@@ -1,5 +1,8 @@
-def main():
-    print("Hello from jira-mcp-py!")
+from jira_mcp import run_server
+
+
+def main() -> None:
+    run_server()
 
 
 if __name__ == "__main__":
