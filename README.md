@@ -8,7 +8,7 @@
 
 当前版本只提供 3 个只读工具：
 
-- `whoami`：验证 Jira 连通性与 PAT 是否可用
+- `whoami`：验证 Jira 连通性与请求中的 PAT 是否可用
 - `search_issues`：按 JQL 查询 issue，支持分页和字段白名单
 - `get_issue`：按 issue key 或数值 id 读取单票详情
 
@@ -16,6 +16,7 @@
 
 - 基于官方 Python `mcp` SDK
 - 使用 Jira Data Center PAT 认证
+- 从 MCP 客户端传入的 `Authorization` 头透传 Jira PAT
 - 仅暴露只读工具，不包含写操作
 - 对 `fields`、`expand` 和 `max_results` 做服务端限制
 - 默认只监听 `127.0.0.1`，更适合同机测试
@@ -41,10 +42,9 @@ uv sync
 cp .env.example .env
 ```
 
-至少需要修改这两项：
+至少需要修改这一项：
 
 - `JIRA_BASE_URL`
-- `JIRA_PAT`
 
 如需使用 `.env` 文件启动，先在当前 shell 中加载：
 
@@ -60,7 +60,6 @@ set +a
 
 ```bash
 export JIRA_BASE_URL="https://jiradc.example.com"
-export JIRA_PAT="your-personal-access-token"
 ```
 
 常用可选项：
@@ -76,6 +75,32 @@ export MCP_PATH="/mcp"
 ```
 
 完整示例见 [`.env.example`](.env.example)。
+
+### Codex MCP 客户端配置
+
+Jira PAT 不再通过服务端环境变量注入，而是由 MCP 客户端在每次请求中携带 `Authorization` 头。
+
+例如，在 `~/.codex/config.toml` 中配置：
+
+```toml
+[mcp_servers.jira]
+url = "http://127.0.0.1:8000/mcp"
+
+[mcp_servers.jira.http_headers]
+Authorization = "Bearer your_jira_pat"
+```
+
+如果服务是远程部署的，把 `url` 改成你的远程 MCP 地址即可，例如：
+
+```toml
+[mcp_servers.jira]
+url = "https://your-mcp-server.example.com/mcp"
+
+[mcp_servers.jira.http_headers]
+Authorization = "Bearer your_jira_pat"
+```
+
+如果未配置该 Header，`whoami`、`search_issues` 和 `get_issue` 会直接返回缺少鉴权头的错误。
 
 ## 运行
 
@@ -105,7 +130,7 @@ http://127.0.0.1:8000/mcp
 
 返回当前 Jira 用户信息，用于验证：
 
-- PAT 是否有效
+- 请求中的 PAT 是否有效
 - Jira REST API 是否可达
 - 当前身份是否与预期一致
 
@@ -152,10 +177,11 @@ export MCP_PATH="/mcp"
 最小验证顺序：
 
 1. 启动服务
-2. 连接 `http://127.0.0.1:8000/mcp`
-3. 调用 `whoami`
-4. 调用 `search_issues`
-5. 调用 `get_issue`
+2. 在 `~/.codex/config.toml` 中配置 MCP 地址和 `Authorization` 头
+3. 连接 `http://127.0.0.1:8000/mcp`
+4. 调用 `whoami`
+5. 调用 `search_issues`
+6. 调用 `get_issue`
 
 ## 已验证场景
 
@@ -172,7 +198,7 @@ export MCP_PATH="/mcp"
 
 ## Jira 认证方式
 
-Jira Data Center PAT 使用 Bearer Token：
+Jira Data Center PAT 使用 Bearer Token，并由 MCP 客户端透传给服务端：
 
 ```http
 Authorization: Bearer <PAT>
@@ -183,6 +209,7 @@ Authorization: Bearer <PAT>
 - 这是只读 MCP Server，不暴露写操作工具。
 - PAT 不应写入代码，也不要提交到仓库。
 - 建议使用权限受限的只读账号生成 PAT。
+- MCP Server 本身不保存 Jira PAT，而是使用客户端请求中传入的 `Authorization` 头访问 Jira。
 - 默认只监听 `127.0.0.1`。如果需要远程部署，请显式设置 `MCP_HOST`，并放在反向代理、内网 ACL 或其他鉴权层后面。
 - 如果 Jira 使用企业 CA 或自签名证书，应正确配置 TLS 校验链，而不是长期关闭 SSL 校验。
 

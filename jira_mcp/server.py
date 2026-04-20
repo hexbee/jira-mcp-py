@@ -53,8 +53,9 @@ def create_server(config: AppConfig | None = None) -> FastMCP[AppState]:
     @mcp.tool(description="Validate Jira connectivity and return the current Jira identity.", structured_output=True)
     async def whoami(ctx: Context) -> dict[str, Any]:
         state = _get_state(ctx)
+        authorization_header = _get_jira_authorization(ctx)
         try:
-            payload = await state.jira.get_myself()
+            payload = await state.jira.get_myself(authorization_header=authorization_header)
         except (JiraAuthError, JiraNotFoundError, JiraRequestError) as exc:
             raise ValueError(str(exc)) from exc
         return sanitize_myself(payload)
@@ -72,6 +73,7 @@ def create_server(config: AppConfig | None = None) -> FastMCP[AppState]:
         ctx: Context,
     ) -> dict[str, Any]:
         state = _get_state(ctx)
+        authorization_header = _get_jira_authorization(ctx)
         cleaned_jql = jql.strip()
         if not cleaned_jql:
             raise ValueError("jql cannot be empty")
@@ -90,6 +92,7 @@ def create_server(config: AppConfig | None = None) -> FastMCP[AppState]:
 
         try:
             payload = await state.jira.search_issues(
+                authorization_header=authorization_header,
                 jql=cleaned_jql,
                 start_at=start_at,
                 max_results=bounded_max_results,
@@ -111,6 +114,7 @@ def create_server(config: AppConfig | None = None) -> FastMCP[AppState]:
         ctx: Context,
     ) -> dict[str, Any]:
         state = _get_state(ctx)
+        authorization_header = _get_jira_authorization(ctx)
         cleaned_issue_key = issue_key.strip()
         if not cleaned_issue_key:
             raise ValueError("issue_key cannot be empty")
@@ -127,6 +131,7 @@ def create_server(config: AppConfig | None = None) -> FastMCP[AppState]:
         try:
             payload = await state.jira.get_issue(
                 cleaned_issue_key,
+                authorization_header=authorization_header,
                 fields=selected_fields,
                 expands=selected_expands,
             )
@@ -151,3 +156,28 @@ def run_server() -> None:
 
 def _get_state(ctx: Context) -> AppState:
     return ctx.request_context.lifespan_context
+
+
+def _get_jira_authorization(ctx: Context) -> str:
+    request_context = getattr(ctx, "request_context", None)
+    request = getattr(request_context, "request", None)
+    headers = getattr(request, "headers", None)
+
+    if headers is None:
+        raise ValueError(
+            "Authorization header is unavailable for this request. Configure it under "
+            "`mcp_servers.jira.http_headers` in `~/.codex/config.toml`."
+        )
+
+    authorization_header = headers.get("authorization", "").strip()
+    if not authorization_header:
+        raise ValueError(
+            "Missing Authorization header. Configure it under `mcp_servers.jira.http_headers` "
+            "in `~/.codex/config.toml`."
+        )
+    if not authorization_header.lower().startswith("bearer "):
+        raise ValueError("Authorization header must use the format `Bearer <jira_pat>`.")
+    if not authorization_header[7:].strip():
+        raise ValueError("Authorization header must include a non-empty Jira PAT.")
+
+    return authorization_header

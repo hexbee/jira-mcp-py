@@ -67,7 +67,6 @@ def _parse_csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
 @dataclass(frozen=True)
 class AppConfig:
     jira_base_url: str
-    jira_pat: str
     jira_rest_prefix: str
     jira_timeout_seconds: float
     jira_verify_ssl: bool
@@ -108,7 +107,6 @@ class AppConfig:
 
         return cls(
             jira_base_url=jira_base_url,
-            jira_pat=_require_env("JIRA_PAT"),
             jira_rest_prefix=jira_rest_prefix,
             jira_timeout_seconds=_read_float("JIRA_TIMEOUT_SECONDS", 15.0, minimum=0.1),
             jira_verify_ssl=_read_bool("JIRA_VERIFY_SSL", True),

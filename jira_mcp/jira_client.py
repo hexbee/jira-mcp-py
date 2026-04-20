@@ -31,7 +31,6 @@ class JiraClient:
             timeout=config.jira_timeout_seconds,
             verify=config.jira_verify_ssl,
             headers={
-                "Authorization": f"Bearer {config.jira_pat}",
                 "Accept": "application/json",
             },
         )
@@ -39,12 +38,13 @@ class JiraClient:
     async def aclose(self) -> None:
         await self._client.aclose()
 
-    async def get_myself(self) -> dict[str, Any]:
-        return await self._get("/myself")
+    async def get_myself(self, *, authorization_header: str) -> dict[str, Any]:
+        return await self._get("/myself", authorization_header=authorization_header)
 
     async def search_issues(
         self,
         *,
+        authorization_header: str,
         jql: str,
         start_at: int,
         max_results: int,
@@ -56,23 +56,38 @@ class JiraClient:
             "maxResults": max_results,
             "fields": ",".join(fields),
         }
-        return await self._get("/search", params=params)
+        return await self._get("/search", params=params, authorization_header=authorization_header)
 
     async def get_issue(
         self,
         issue_key: str,
         *,
+        authorization_header: str,
         fields: list[str],
         expands: list[str],
     ) -> dict[str, Any]:
         params: dict[str, str] = {"fields": ",".join(fields)}
         if expands:
             params["expand"] = ",".join(expands)
-        return await self._get(f"/issue/{quote(issue_key, safe='')}", params=params)
+        return await self._get(
+            f"/issue/{quote(issue_key, safe='')}",
+            params=params,
+            authorization_header=authorization_header,
+        )
 
-    async def _get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def _get(
+        self,
+        path: str,
+        *,
+        authorization_header: str,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         try:
-            response = await self._client.get(self._config.jira_api_url(path), params=params)
+            response = await self._client.get(
+                self._config.jira_api_url(path),
+                params=params,
+                headers={"Authorization": authorization_header},
+            )
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise JiraRequestError("Request to Jira timed out") from exc
