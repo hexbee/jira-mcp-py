@@ -142,7 +142,11 @@ def create_server(config: AppConfig | None = None) -> FastMCP[AppState]:
 
 
 def run_server() -> None:
-    create_server().run(transport="streamable-http")
+    try:
+        create_server().run(transport="streamable-http")
+    except KeyboardInterrupt:
+        # Suppress the expected traceback when stopping the server with Ctrl+C.
+        pass
 
 
 def _get_state(ctx: Context) -> AppState:
